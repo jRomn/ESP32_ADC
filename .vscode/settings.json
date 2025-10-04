@@ -1,0 +1,68 @@
+{
+    // ==============================
+    // ESP-IDF specific settings
+    // ==============================
+    "idf.portWin": "COM9",          // Serial port used for flashing/monitoring
+    "idf.flashType": "UART",        // Connection type
+
+    // ==============================
+    // CMake settings (disable auto-configure to avoid conflicts with VS IntelliSense)
+    // ==============================
+    "cmake.enabled": false,
+    "cmake.configureOnOpen": false,
+    "cmake.ignoreCMakeListsMissing": true,
+    "cmake.sourceDirectory": "${workspaceFolder}/nonexistent",
+
+    // ==============================
+    // C/C++ IntelliSense settings
+    // ==============================
+    "C_Cpp.default.includePath": [
+        // All ESP-IDF components
+        "C:/Users/tmpor/Documents/ESP-IDF/components/**",
+        // FreeRTOS kernel includes
+        "C:/Users/tmpor/Documents/ESP-IDF/components/freertos/FreeRTOS-Kernel/include",
+        "C:/Users/tmpor/Documents/ESP-IDF/components/freertos/FreeRTOS-Kernel-SMP/include",
+        // Drivers
+        "C:/Users/tmpor/Documents/ESP-IDF/components/driver/include",
+        // ESP system
+        "C:/Users/tmpor/Documents/ESP-IDF/components/esp_system/include",
+        "C:/Users/tmpor/Documents/ESP-IDF/components/esp_chip_info/include",
+        // Newlib headers (used by ESP-IDF for POSIX compatibility)
+        "C:/Users/tmpor/Documents/ESP-IDF/components/newlib/include"
+    ],
+
+    "C_Cpp.default.compilerPath": "C:/Users/tmpor/.espressif/python_env/idf5.5_py3.13_env/Scripts/python.exe",
+    "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+
+    // Browse path: where VS Code searches for definitions and symbols
+    "C_Cpp.default.browse.path": [
+        "C:/Users/tmpor/Documents/ESP-IDF/components/**"
+    ],
+
+    // ==============================
+    // Optional: disable squiggles for false positives
+    // ==============================
+    "C_Cpp.errorSquiggles": "disabled",
+
+    // ==============================
+    // Optional: force include for IntelliSense (helps with ESP-IDF configs)
+    // ==============================
+    "C_Cpp.default.forcedInclude": [
+        "C:/Users/tmpor/Documents/ESP-IDF/components/freertos/FreeRTOS-Kernel/include/freertos/FreeRTOSConfig.h"
+    ],
+    "files.associations": {
+        "stdio.h": "c"
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
