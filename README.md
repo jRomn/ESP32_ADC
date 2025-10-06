@@ -1,31 +1,31 @@
 ESP32 ADC + Signal Processing + BLE
 
-Description:
 This repository contains example firmware for the ESP32 that demonstrates analog signal acquisition, calibration, filtering, and wireless streaming. It focuses on using the ESP-IDF ADC oneshot driver, FreeRTOS tasks, and BLE GATT services for real-time signal monitoring.
 
 Key Features:
 
-ADC Sampling
+1. ADC Sampling
 
-Reads analog signals from ESP32 ADC channels using the modern adc_oneshot driver.
+   - Reads analog signals from ESP32 ADC channels using the modern adc_oneshot driver.
 
-Supports calibrated voltage readings (millivolts) via ESP-IDF calibration APIs.
+   - Supports calibrated voltage readings (millivolts) via ESP-IDF calibration APIs.
 
-Stores samples in a circular buffer for smooth data management.
+   - Stores samples in a circular buffer for smooth data management.
 
-Signal Filtering
+2. Signal Filtering
 
-Implements a simple moving average low-pass filter as an example of real-time signal processing.
+   - Implements a simple moving average low-pass filter as an example of real-time signal processing.
 
-Prepares the data for further analysis or transmission.
+   - Prepares the data for further analysis or transmission.
 
-Demonstrates how to create additional FreeRTOS tasks for non-blocking filtering.
+   - Demonstrates how to create additional FreeRTOS tasks for non-blocking filtering.
 
-BLE Streaming (Future Step)
+3. BLE Streaming (Future Step)
 
-Plans to send filtered signals over BLE using a custom GATT characteristic.
+   - Plans to send filtered signals over BLE using a custom GATT characteristic.
 
-Allows real-time monitoring from mobile or desktop apps.
+   - Allows real-time monitoring from mobile or desktop apps.
+   
 
 Technical Details:
 
