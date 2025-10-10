@@ -8,10 +8,12 @@
 #include "esp_adc/adc_oneshot.h"    // For ADC HW interation
 #include "esp_adc/adc_cali.h"       // For voltage calibration
 
+
 // =============================
 // Application Log Tag
 // =============================
 #define TAG "ADC_BASIC"
+
 
 // =============================
 // ADC Configuration
@@ -23,6 +25,15 @@
 #define BUFFER_SIZE    256             // Circular buffer length
 #define ADC_SAMPLE_PERIOD_MS 100       // Sampling period (ms)
 
+
+// =============================
+// Global Handles
+// =============================
+// Shared between tasks
+static adc_oneshot_unit_handle_t adc_handle;  // ADC driver handle
+static adc_cali_handle_t adc_cali_handle;     // Calibration handle
+
+
 // =============================
 // Circular Buffer Declaration
 // =============================
@@ -30,68 +41,71 @@
 static int16_t adc_buffer[BUFFER_SIZE];     // vector of size 256
 static volatile size_t buffer_index = 0;    // index pointing to  where the next sample will be written
 
-// =============================
-// ADC + Calibration Handles
-// =============================
-static adc_oneshot_unit_handle_t adc_handle = NULL;   // Reference to ADC driver
-static adc_cali_handle_t adc_cali_handle = NULL;      // Reference to ADC calibration object
 
 // =============================
-// Function: Initialize ADC + Calibration
+// ADC Unit Initialization + Channel Configuration + Calibration
 // =============================
+// Function to initialize the ADC unit, configure the channel, and set up calibration.
+// Returns a handle to the initialized ADC unit.
 adc_oneshot_unit_handle_t init_adc(void)
 {
-    // --- 0. Start logging ---
-    ESP_LOGI(TAG, "Starting ADC basic example...");
 
+    esp_err_t ret;
 
-    // --- 1. ADC Unit Configuration ---
+    // ==============================
+    // 1️⃣ ADC Unit Configuration
+    // ==============================
 
-    // STEP 1 : Create a Handle 
-    // — a reference (pointer) that will later point to the definition of a ADC Hardware Block (structure).
-    // adc_oneshot_unit_handle_t adc_handle;
+    // STEP 1A : Create a Handle (Done - Alrady defined globally)
+    // A handle is like a "pointer" or reference to a software object that represents
+    // the ADC hardware inside ESP-IDF. This handle will be used for all future ADC calls.
+    // (At this point, adc_handle is just a NULL pointer.)
+    // static adc_oneshot_unit_handle_t adc_handle;    // Reference to ADC driver
 
-    // STEP 2 : Define the ADC Hardware Block (structure) configuration
-    // — global settings that apply to the entire ADC peripheral: which unit, resolution, clock, attenuation, etc.
+    // STEP 1B : Define the ADC Unit configuration structure
+    // This structure describes global settings for the ADC peripheral.
+    // - unit_id: Which ADC hardware block (ADC1 or ADC2)
     adc_oneshot_unit_init_cfg_t init_config = {
-        .unit_id = ADC_UNIT_1,   // Which ADC hardware block (ADC1 or ADC2)
+        .unit_id = ADC_UNIT_1,   // Use ADC1 block
     };
-    // Nothing has been initialized yet — this is just the desired setup description.
+    // Nothing is initialized yet. This is just the **desired configuration**.
 
-    // STEP 3 : Initializa and Create the ADC Unit structure within the ESP-IDF (make it active):
-    // - Allocates memory for the ADC driver object (internally, on the heap)
-    // - Configures the ADC hardware registers based on your init_config.
-    // - Updates your adc_handle pointer to point to that new driver object.
-    esp_err_t ret = adc_oneshot_new_unit(&init_config, &adc_handle);
-
+    // STEP 1C : Initialize ADC unit using the ESP-IDF API
+    // Function: adc_oneshot_new_unit(init_config, &adc_handle)
+    // What it does:
+    // 1. Allocates memory for the ADC driver object
+    // 2. Programs ADC hardware registers according to init_config
+    // 3. Updates adc_handle to point to this driver object
+    ret = adc_oneshot_new_unit(&init_config, &adc_handle);
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "ADC unit initialized successfully!");
+        ESP_LOGI(TAG, "ADC Unit initialized successfully!");
     } else {
         ESP_LOGE(TAG, "Failed to initialize ADC unit! Error code: %d", ret);
-        return; // Stop if initialization failed
+        return NULL; // Stop if initialization failed
     }
-    // Now the "adc_handle" a real, fully initialized ADC driver managed by the ESP-IDF.
-    // but it doesn’t know which physical pin you want to read from yet, 
-    // or how to interpret signals coming into that pin.
+    // Now adc_handle points to a fully initialized ADC driver object
+    // but the ADC channel/pin and input scaling are not set yet.
 
-    // --- 2. ADC Channel Configuration ---
+    // ==============================
+    // 2️⃣ ADC Channel Configuration
+    // ==============================
 
-    // STEP 4 : Define a Channel Configuration 
-    // - This is a separate configuration structure that describes how to read from a specific ADC channel (pin).
-    // - How many bits to convert(bitwidth)
-    // - How much input voltage range you expect (attenuation)
+    // STEP 2B : Define the Channel Configuration structure
+    // This is a separate configuration structure that describes how to read from a specific ADC channel (pin).
+    // - bitwidth: Resolution of conversion (default 12-bit)
+    // - attenuation: How much input voltage the ADC can measure (~3.3V for DB_11)
     adc_oneshot_chan_cfg_t chan_config = {
         .bitwidth = ADC_BITWIDTH_DEFAULT,  // Default 12-bit resolution
         .atten = ADC_ATTEN_DB_11           // ~3.3V full-scale voltage range
     };
 
-    // STEP 5: Apply the ""Channel Configuration" to an specific ADC Channel
+    // STEP 2C: [ BLANK]
     ret = adc_oneshot_config_channel(adc_handle, ADC_CHANNEL, &chan_config);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "ADC channel configured successfully!");
     } else {
         ESP_LOGE(TAG, "Failed to configure ADC channel! Error code: %d", ret);
-        return;
+        return NULL;
     }
 
     // ==============================
@@ -102,22 +116,23 @@ adc_oneshot_unit_handle_t init_adc(void)
     // On ESP32, raw ADC values may vary due to temperature, voltage supply, and manufacturing.
     // The calibration API converts raw readings to mV.
 
-    adc_cali_handle_t handle = NULL; // Temporary handle for calibration object
-
-    // Step 3a: Define calibration configuration
+    // Step 3A: Define the Calibration configuration structure
+    // This structure describes how the calibration should be performed.
+    // - unit_id: Which ADC unit (must match the one used before)
+    // - atten: Must match the attenuation used in channel config
+    // - bitwidth: Must match the bitwidth used in channel config
     adc_cali_curve_fitting_config_t cali_cfg = {
         .unit_id = ADC_UNIT,               // Same ADC unit as before
         .atten = ADC_ATTEN_DB_11,          // Same attenuation as channel config
         .bitwidth = ADC_BITWIDTH_DEFAULT   // Same bitwidth as channel config
     };
 
-    // Step 3b: Create calibration object using ESP-IDF API
+    // Step 3B: Initialize Calibration using ESP-IDF API
     // Function: adc_cali_create_scheme_curve_fitting(&cali_cfg, &handle)
     // What it does:
     // - Allocates memory for calibration object
     // - Prepares math to convert raw ADC → voltage (mV)
-    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &handle) == ESP_OK) {
-        adc_cali_handle = handle;        // Save the calibration handle globally
+    if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &adc_cali_handle) == ESP_OK) {
         ESP_LOGI(TAG, "ADC calibration ready.");
     } else {
         ESP_LOGW(TAG, "ADC calibration not available. Using raw ADC values.");
@@ -135,9 +150,10 @@ adc_oneshot_unit_handle_t init_adc(void)
 // =============================
 // FreeRTOS Task: ADC Sampling
 // =============================
-void adc_task(void *arg)
+void adc_sampling(void *arg)
 {
     while (1) {
+
         int raw = 0;
         uint16_t voltage = 0; // Calibrated voltage in mV
 
@@ -160,39 +176,71 @@ void adc_task(void *arg)
         ESP_LOGI(TAG, "ADC Voltage: %d mV", voltage);
 
         // --- 5. Delay for next sample (100 ms) ---
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(ADC_SAMPLE_PERIOD_MS));
     }
 }
+
+// =============================
+// FreeRTOS Task: Filtering
+// =============================
+void adc_filtering(void *arg)
+{
+    const size_t filter_size = 5;  // Moving average window
+    int sum = 0;
+    int filtered_value = 0;
+
+    while (1) {
+        sum = 0;
+
+        // Compute moving average of last N samples
+        for (size_t i = 0; i < filter_size; i++) {
+            size_t index = (buffer_index + BUFFER_SIZE - 1 - i) % BUFFER_SIZE;
+            sum += adc_buffer[index];
+        }
+        filtered_value = sum / filter_size;
+
+        // Display filtered value
+        ESP_LOGI(TAG, "Filtered ADC Voltage: %d mV", filtered_value);
+
+        // Control filtering frequency (matches sampling)
+        vTaskDelay(pdMS_TO_TICKS(ADC_SAMPLE_PERIOD_MS));
+    }
+}
+
 
 // =============================
 // Main Application Entry Point
 // =============================
 void app_main(void)
-{
-    ESP_LOGI(TAG, "Starting ADC periodic sampling example...");
+{   
+    // --- Start logging ---
+    // ESP-IDF functon to print to serial console
+    ESP_LOGI(TAG, "Starting ADC Initialization and Calibration...");
 
     // --- Initialize ADC ---
-    adc_oneshot_unit_handle_t adc_handle = init_adc();
+    // ESP-IDF function to setup ADC Unit, Channel, and Calibration
+    // In specific ADC Unit 1 - Channel 6 (GPIO34)
+    adc_handle = init_adc();
     if (!adc_handle) {
         ESP_LOGE(TAG, "ADC initialization failed. Exiting.");
         return;
     }
 
-    // --- Create ADC Task ---
-    // xTaskCreate(TaskFunction, Name, StackDepth, Parameters, Priority, TaskHandle)
-    BaseType_t task_status = xTaskCreate(
-        adc_task,          // Task function (runs in its own context)
-        "ADC Task",        // Task name (for debugging)
-        2048,              // Stack size in words (not bytes!)
-        (void *)adc_handle,// Parameter passed to the task (our ADC handle)
-        5,                 // Task priority (higher = more important)
-        NULL               // Optional task handle (can be NULL if not needed)
-    );
+    
+    BaseType_t task_status;
 
+    // --- Task for ADC Sampling ---
+    task_status = xTaskCreate(adc_sampling, "ADC Sampling", 2048, NULL, 5, NULL);
+    if (task_status != pdPASS)
+        ESP_LOGE(TAG, "Failed to create ADC sampling task!");
+    // --- Task for ADC Filtering ---
+    task_status = xTaskCreate(adc_filtering, "ADC Filtering", 2048, NULL, 4, NULL);
     if (task_status == pdPASS) {
         ESP_LOGI(TAG, "ADC task created successfully!");
     } else {
         ESP_LOGE(TAG, "Failed to create ADC task!");
     }
+
 }
+
 
